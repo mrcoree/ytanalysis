@@ -21,7 +21,7 @@ def fetch_video_stats(video_ids: list[str]) -> list[dict]:
         for i in range(0, len(video_ids), 50):
             batch = video_ids[i:i + 50]
             params = {
-                "part": "statistics",
+                "part": "statistics,snippet",
                 "id": ",".join(batch),
             }
             response = api_request(YOUTUBE_VIDEOS_URL, params)
@@ -32,11 +32,13 @@ def fetch_video_stats(video_ids: list[str]) -> list[dict]:
 
             for item in data.get("items", []):
                 stats = item["statistics"]
+                snippet = item.get("snippet", {})
                 results.append({
                     "video_id": item["id"],
                     "views": int(stats.get("viewCount", 0)),
                     "likes": int(stats.get("likeCount", 0)),
                     "comments": int(stats.get("commentCount", 0)),
+                    "description": snippet.get("description", ""),
                 })
         return results
     except Exception:
@@ -74,7 +76,16 @@ def _save_stats_and_analyze(db: Session, stats_list: list[dict]):
     for stat in stats_list:
         vid = stat["video_id"]
         video_obj = video_map.get(vid)
-        sub_count = video_obj.subscriber_count if video_obj and video_obj.subscriber_count else 0
+        if not video_obj:
+            continue
+        # 설명이 잘려있으면 전체 설명으로 업데이트
+        new_desc = stat.get("description", "")
+        if new_desc and video_obj and (
+            not video_obj.description
+            or len(new_desc) > len(video_obj.description or "")
+        ):
+            video_obj.description = new_desc
+        sub_count = video_obj.subscriber_count if video_obj.subscriber_count else 0
         vph = calculate_vph(db, vid)
         score = calculate_viral_score(
             vph=vph,
