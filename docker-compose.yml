@@ -19,11 +19,6 @@ services:
         condition: service_started
     volumes:
       - .:/app
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 2G
 
   worker:
     build: .
@@ -40,11 +35,6 @@ services:
         condition: service_started
     volumes:
       - .:/app
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: 1G
 
   postgres:
     image: postgres:16-alpine
