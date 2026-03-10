@@ -69,6 +69,7 @@ class SearchHistory(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     keyword = Column(String, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     searched_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

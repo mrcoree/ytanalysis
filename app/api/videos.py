@@ -15,7 +15,7 @@ def get_recent_tags(db: Session = Depends(get_db), current_user: User = Depends(
     cutoff = datetime.now(timezone.utc) - timedelta(days=7)
     rows = (
         db.query(SearchHistory.keyword, func.count(SearchHistory.id).label("cnt"))
-        .filter(SearchHistory.searched_at >= cutoff)
+        .filter(SearchHistory.searched_at >= cutoff, SearchHistory.user_id == current_user.id)
         .group_by(SearchHistory.keyword)
         .order_by(func.count(SearchHistory.id).desc())
         .limit(10)
@@ -26,7 +26,7 @@ def get_recent_tags(db: Session = Depends(get_db), current_user: User = Depends(
 
 @router.delete("/tags/{keyword}")
 def delete_tag(keyword: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    deleted = db.query(SearchHistory).filter(SearchHistory.keyword == keyword).delete()
+    deleted = db.query(SearchHistory).filter(SearchHistory.keyword == keyword, SearchHistory.user_id == current_user.id).delete()
     db.commit()
     return {"ok": True, "deleted": deleted}
 
@@ -43,7 +43,7 @@ def get_videos(
     keyword = keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="검색 키워드를 입력하세요")
-    db.add(SearchHistory(keyword=keyword))
+    db.add(SearchHistory(keyword=keyword, user_id=current_user.id))
     db.commit()
 
     # 1. 영상 검색 & DB 저장 (API 실패 시 DB 캐시 사용)
