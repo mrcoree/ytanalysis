@@ -85,6 +85,8 @@ def search_videos(keyword: str, max_results: int = 50, duration: str | None = No
                 v["duration"] = d.get("duration", "")
                 v["tags"] = d.get("tags", "")
                 v["category_id"] = d.get("category_id", "")
+                if d.get("description"):
+                    v["description"] = d["description"]
                 v["subscriber_count"] = sub_counts.get(v["channel_id"], 0)
                 v["views"] = d.get("views", 0)
                 v["likes"] = d.get("likes", 0)
@@ -116,6 +118,7 @@ def _fetch_video_details(video_ids: list[str]) -> dict[str, dict]:
                         "tags": ",".join(snippet.get("tags", [])),
                         "category_id": snippet.get("categoryId", ""),
                         "channel_id": snippet.get("channelId", ""),
+                        "description": snippet.get("description", ""),
                         "views": int(stats.get("viewCount", 0)),
                         "likes": int(stats.get("likeCount", 0)),
                         "comments": int(stats.get("commentCount", 0)),
@@ -174,7 +177,7 @@ def save_videos(db: Session, videos: list[dict]) -> int:
         else:
             if v.get("channel_title") and not existing.channel_title:
                 existing.channel_title = v["channel_title"]
-            if v.get("description") and not existing.description:
+            if v.get("description") and (not existing.description or len(v["description"]) > len(existing.description or "")):
                 existing.description = v["description"]
             if v.get("duration") and not existing.duration:
                 existing.duration = v["duration"]
