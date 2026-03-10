@@ -52,9 +52,9 @@ def filter_by_duration(items: list[dict], duration: str | None) -> list[dict]:
     result = []
     for item in items:
         secs = duration_to_seconds(item.get("duration", ""))
-        if duration == "short" and secs <= 60:
+        if duration == "short" and secs <= 180:
             result.append(item)
-        elif duration == "medium" and 60 < secs <= 1200:
+        elif duration == "medium" and 180 < secs <= 1200:
             result.append(item)
         elif duration == "long" and secs > 1200:
             result.append(item)

@@ -61,9 +61,9 @@ def _filter_by_duration_python(items, duration: str | None, video_extractor=None
     for item in items:
         v = video_extractor(item) if video_extractor else item
         secs = duration_to_seconds(v.duration or "")
-        if duration == "short" and secs <= 60:
+        if duration == "short" and secs <= 180:
             result.append(item)
-        elif duration == "medium" and 60 < secs <= 1200:
+        elif duration == "medium" and 180 < secs <= 1200:
             result.append(item)
         elif duration == "long" and secs > 1200:
             result.append(item)
