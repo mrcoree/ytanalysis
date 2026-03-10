@@ -1969,8 +1969,12 @@
 
             document.getElementById('dashTotal').textContent = formatNumber(data.total_videos);
             document.getElementById('dashStats').textContent = formatNumber(data.total_stats_records);
-            document.getElementById('dashLastCollected').textContent = data.last_collected_at
-                ? formatElapsed(data.last_collected_at) : '없음';
+            if (data.last_collected_at) {
+                _lastCollectedAt = data.last_collected_at;
+                document.getElementById('dashLastCollected').textContent = formatElapsed(_lastCollectedAt);
+            } else {
+                document.getElementById('dashLastCollected').textContent = '없음';
+            }
 
             const kwContainer = document.getElementById('dashKeywords');
             if (data.recent_keywords.length > 0) {
@@ -2834,6 +2838,13 @@
         if (!dateStr) return null;
         return new Date(dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z');
     }
+
+    let _lastCollectedAt = null;
+    setInterval(() => {
+        if (_lastCollectedAt) {
+            document.getElementById('dashLastCollected').textContent = formatElapsed(_lastCollectedAt);
+        }
+    }, 10000);
 
     function formatElapsed(dateStr) {
         if (!dateStr) return '-';
