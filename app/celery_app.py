@@ -28,9 +28,9 @@ celery.conf.beat_schedule = {
         "task": "app.tasks.discover_trending",
         "schedule": 3600.0,  # 1시간
     },
-    "check-channel-new-videos-every-15-min": {
+    "check-channel-new-videos-every-30-min": {
         "task": "app.tasks.check_channel_new_videos",
-        "schedule": 900.0,  # 15분
+        "schedule": 1800.0,  # 30분 (RSS 무료 + 새 영상만 API)
     },
     "auto-search-watched-keywords-daily": {
         "task": "app.tasks.auto_search_watched_keywords",

@@ -103,14 +103,104 @@ def discover_trending():
 
 @celery.task(name="app.tasks.check_channel_new_videos")
 def check_channel_new_videos():
-    """즐겨찾기 채널의 새 영상 감지 → 각 사용자에게 알림 생성"""
+    """즐겨찾기 채널 RSS로 새 영상 감지 → DB 저장 + 알림 생성 (API 최소화)"""
+    import html as html_mod
+    import requests
+    from xml.etree import ElementTree
+    from app.crawler.youtube_search import _fetch_video_details, save_videos, _fetch_subscriber_counts
+    from app.crawler.stats_collector import _save_stats_and_analyze
+
     db = SessionLocal()
     try:
         bookmarks = db.query(ChannelBookmark).all()
         if not bookmarks:
             return
 
-        # 기존 알림을 배치로 조회 (N+1 방지)
+        # 고유 채널 목록
+        channel_ids = list({cb.channel_id for cb in bookmarks})
+        logger.info("check_channel_new_videos: RSS checking %d channels", len(channel_ids))
+
+        # 1) RSS로 각 채널의 최신 영상 ID 수집 (무료)
+        new_video_ids = []
+        rss_videos = {}  # video_id -> basic info from RSS
+        for ch_id in channel_ids:
+            try:
+                rss_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={ch_id}"
+                resp = requests.get(rss_url, timeout=10)
+                if resp.status_code != 200:
+                    continue
+                root = ElementTree.fromstring(resp.content)
+                ns = {"atom": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015", "media": "http://search.yahoo.com/mrss/"}
+                for entry in root.findall("atom:entry", ns):
+                    vid = entry.find("yt:videoId", ns)
+                    if vid is None:
+                        continue
+                    video_id = vid.text
+                    # DB에 이미 있는 영상은 스킵
+                    exists = db.query(Video.video_id).filter(Video.video_id == video_id).first()
+                    if exists:
+                        continue
+                    title_el = entry.find("atom:title", ns)
+                    published_el = entry.find("atom:published", ns)
+                    rss_videos[video_id] = {
+                        "channel_id": ch_id,
+                        "title": html_mod.unescape(title_el.text) if title_el is not None else "",
+                        "published": published_el.text if published_el is not None else "",
+                    }
+                    new_video_ids.append(video_id)
+            except Exception:
+                logger.exception("RSS fetch failed for channel %s", ch_id)
+
+        # 2) 새 영상이 있으면 API로 상세정보 조회 후 DB 저장
+        if new_video_ids:
+            logger.info("check_channel_new_videos: %d new videos found via RSS", len(new_video_ids))
+            details = _fetch_video_details(new_video_ids)
+
+            # 구독자 수 조회
+            detail_channel_ids = list({d.get("channel_id", "") for d in details.values() if d.get("channel_id")})
+            sub_counts = _fetch_subscriber_counts(detail_channel_ids) if detail_channel_ids else {}
+
+            videos_to_save = []
+            for vid in new_video_ids:
+                rss = rss_videos.get(vid, {})
+                d = details.get(vid, {})
+                ch_id = d.get("channel_id") or rss.get("channel_id", "")
+                published_dt = None
+                published_str = rss.get("published", "")
+                if published_str:
+                    try:
+                        published_dt = datetime.fromisoformat(published_str.replace("Z", "+00:00"))
+                    except Exception:
+                        pass
+
+                videos_to_save.append({
+                    "video_id": vid,
+                    "title": rss.get("title", "") or d.get("description", "")[:100],
+                    "channel_id": ch_id,
+                    "channel_title": "",
+                    "description": d.get("description", ""),
+                    "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+                    "published_at": published_dt,
+                    "duration": d.get("duration", ""),
+                    "tags": d.get("tags", ""),
+                    "category_id": d.get("category_id", ""),
+                    "subscriber_count": sub_counts.get(ch_id, 0),
+                    "views": d.get("views", 0),
+                    "likes": d.get("likes", 0),
+                    "comments": d.get("comments", 0),
+                })
+
+            save_videos(db, videos_to_save)
+
+            # 통계 저장 + 분석
+            stats_list = [
+                {"video_id": v["video_id"], "views": v["views"], "likes": v["likes"], "comments": v["comments"]}
+                for v in videos_to_save if v["views"] > 0
+            ]
+            if stats_list:
+                _save_stats_and_analyze(db, stats_list)
+
+        # 3) 알림 생성 (새 영상 + 기존 DB 영상 모두)
         all_notifs = db.query(
             ChannelNotification.user_id,
             ChannelNotification.channel_id,
@@ -118,11 +208,9 @@ def check_channel_new_videos():
         ).all()
         existing_set = {(n.user_id, n.channel_id, n.video_id) for n in all_notifs}
 
-        # 관련 채널의 영상을 배치로 조회
-        channel_ids = list({cb.channel_id for cb in bookmarks})
-        all_videos = db.query(Video).filter(Video.channel_id.in_(channel_ids)).all()
+        all_db_videos = db.query(Video).filter(Video.channel_id.in_(channel_ids)).all()
         videos_by_channel = {}
-        for v in all_videos:
+        for v in all_db_videos:
             videos_by_channel.setdefault(v.channel_id, []).append(v)
 
         for cb in bookmarks:
@@ -134,7 +222,6 @@ def check_channel_new_videos():
                         channel_id=cb.channel_id,
                         video_id=video.video_id,
                     ))
-
             if not cb.channel_title and channel_videos:
                 first = channel_videos[0]
                 if first.channel_title:
@@ -143,7 +230,7 @@ def check_channel_new_videos():
                     cb.thumbnail = first.thumbnail
 
         db.commit()
-        logger.info("check_channel_new_videos: checked %d bookmarks", len(bookmarks))
+        logger.info("check_channel_new_videos: done, %d new videos added", len(new_video_ids))
     except Exception:
         db.rollback()
         logger.exception("check_channel_new_videos failed")
