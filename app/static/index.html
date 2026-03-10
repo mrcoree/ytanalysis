@@ -3550,7 +3550,7 @@
             document.getElementById('adminApiKeyUsers').textContent = stats.api_key_users;
             document.getElementById('adminTotalVideos').textContent = (stats.total_videos || 0).toLocaleString();
             document.getElementById('adminTotalStats').textContent = (stats.total_stats_records || 0).toLocaleString();
-            document.getElementById('adminLatestCollection').textContent = stats.latest_collection ? new Date(stats.latest_collection).toLocaleString('ko-KR') : '-';
+            document.getElementById('adminLatestCollection').textContent = stats.latest_collection ? new Date(stats.latest_collection + 'Z').toLocaleString('ko-KR', {timeZone: 'Asia/Seoul'}) : '-';
 
             const list = document.getElementById('adminUserList');
             if (!users.length) { list.innerHTML = '<div style="color:var(--text-muted)">사용자가 없습니다</div>'; return; }
