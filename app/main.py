@@ -28,12 +28,19 @@ def _auto_migrate():
                 default = ""
                 if col.default is not None and col.default.arg is not None and not callable(col.default.arg):
                     val = col.default.arg
-                    default = f" DEFAULT '{val}'" if isinstance(val, str) else f" DEFAULT {val}"
+                    if isinstance(val, bool):
+                        default = f" DEFAULT {'TRUE' if val else 'FALSE'}"
+                    elif isinstance(val, str):
+                        # 안전한 이스케이프
+                        default = f" DEFAULT '{val.replace(chr(39), chr(39)+chr(39))}'"
+                    else:
+                        default = f" DEFAULT {int(val)}"
                 nullable = "" if col.nullable else " NOT NULL"
                 # NOT NULL without default will fail on existing rows, make nullable
                 if nullable and not default:
                     nullable = ""
-                sql = f'ALTER TABLE {table.name} ADD COLUMN {col.name} {col_type}{default}{nullable}'
+                # 테이블/컬럼명은 모델에서만 오므로 안전, 따옴표로 감싸 예약어 충돌 방지
+                sql = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type}{default}{nullable}'
                 with engine.begin() as conn:
                     conn.execute(text(sql))
 

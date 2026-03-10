@@ -121,8 +121,7 @@ def check_channel_new_videos():
         logger.info("check_channel_new_videos: RSS checking %d channels", len(channel_ids))
 
         # 1) RSS로 각 채널의 최신 영상 ID 수집 (무료)
-        new_video_ids = []
-        rss_videos = {}  # video_id -> basic info from RSS
+        all_rss_videos = {}  # video_id -> basic info from RSS
         for ch_id in channel_ids:
             try:
                 rss_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={ch_id}"
@@ -135,21 +134,26 @@ def check_channel_new_videos():
                     vid = entry.find("yt:videoId", ns)
                     if vid is None:
                         continue
-                    video_id = vid.text
-                    # DB에 이미 있는 영상은 스킵
-                    exists = db.query(Video.video_id).filter(Video.video_id == video_id).first()
-                    if exists:
-                        continue
                     title_el = entry.find("atom:title", ns)
                     published_el = entry.find("atom:published", ns)
-                    rss_videos[video_id] = {
+                    all_rss_videos[vid.text] = {
                         "channel_id": ch_id,
                         "title": html_mod.unescape(title_el.text) if title_el is not None else "",
                         "published": published_el.text if published_el is not None else "",
                     }
-                    new_video_ids.append(video_id)
             except Exception:
                 logger.exception("RSS fetch failed for channel %s", ch_id)
+
+        # DB에 이미 있는 영상을 일괄 조회하여 필터링 (N+1 방지)
+        if all_rss_videos:
+            existing_ids = {v[0] for v in db.query(Video.video_id).filter(
+                Video.video_id.in_(list(all_rss_videos.keys()))
+            ).all()}
+            rss_videos = {vid: info for vid, info in all_rss_videos.items() if vid not in existing_ids}
+            new_video_ids = list(rss_videos.keys())
+        else:
+            rss_videos = {}
+            new_video_ids = []
 
         # 2) 새 영상이 있으면 API로 상세정보 조회 후 DB 저장
         if new_video_ids:

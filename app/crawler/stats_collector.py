@@ -14,14 +14,18 @@ logger = logging.getLogger(__name__)
 YOUTUBE_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
 
 
-def fetch_video_stats(video_ids: list[str]) -> list[dict]:
-    """YouTube API로 영상 통계 조회 (최대 50개씩)"""
+def fetch_video_stats(video_ids: list[str], include_snippet: bool = False) -> list[dict]:
+    """YouTube API로 영상 통계 조회 (최대 50개씩)
+
+    include_snippet=True이면 설명도 함께 가져옴 (API 비용 2배)
+    """
     try:
         results = []
+        part = "statistics,snippet" if include_snippet else "statistics"
         for i in range(0, len(video_ids), 50):
             batch = video_ids[i:i + 50]
             params = {
-                "part": "statistics,snippet",
+                "part": part,
                 "id": ",".join(batch),
             }
             response = api_request(YOUTUBE_VIDEOS_URL, params)
@@ -32,14 +36,15 @@ def fetch_video_stats(video_ids: list[str]) -> list[dict]:
 
             for item in data.get("items", []):
                 stats = item["statistics"]
-                snippet = item.get("snippet", {})
-                results.append({
+                entry = {
                     "video_id": item["id"],
                     "views": int(stats.get("viewCount", 0)),
                     "likes": int(stats.get("likeCount", 0)),
                     "comments": int(stats.get("commentCount", 0)),
-                    "description": snippet.get("description", ""),
-                })
+                }
+                if include_snippet:
+                    entry["description"] = item.get("snippet", {}).get("description", "")
+                results.append(entry)
         return results
     except Exception:
         logger.exception("fetch_video_stats failed")
@@ -80,7 +85,7 @@ def _save_stats_and_analyze(db: Session, stats_list: list[dict]):
             continue
         # 설명이 잘려있으면 전체 설명으로 업데이트
         new_desc = stat.get("description", "")
-        if new_desc and video_obj and (
+        if new_desc and (
             not video_obj.description
             or len(new_desc) > len(video_obj.description or "")
         ):
@@ -188,7 +193,12 @@ def collect_and_analyze(db: Session, tier: str = "recent"):
 
     logger.info("collect_and_analyze [%s]: %d videos", tier, len(video_ids))
 
-    stats_list = fetch_video_stats(video_ids)
+    # 설명이 없거나 잘린 영상이 있으면 snippet도 함께 조회
+    need_desc = db.query(Video.video_id).filter(
+        Video.video_id.in_(video_ids),
+        (Video.description.is_(None)) | (Video.description == "")
+    ).count() > 0
+    stats_list = fetch_video_stats(video_ids, include_snippet=need_desc)
     _save_stats_and_analyze(db, stats_list)
 
     # 구독자 수 업데이트 (recent 티어에서만, 중복 방지)
