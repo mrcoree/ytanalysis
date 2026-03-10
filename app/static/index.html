@@ -1721,6 +1721,9 @@
             </div>
 
             <div class="modal-tab-content" id="tabTranscript">
+                <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+                    <button id="copyTranscriptBtn" onclick="copyTranscript()" style="display:none;padding:6px 14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-secondary);font-size:12px;cursor:pointer;font-family:inherit"><i class="fas fa-copy"></i> 복사</button>
+                </div>
                 <div class="transcript-box" id="transcriptBox">탭을 클릭하면 자막을 불러옵니다.</div>
             </div>
 
@@ -2452,6 +2455,7 @@
 
         loadStats(videoId);
         document.getElementById('transcriptBox').textContent = '탭을 클릭하면 자막을 불러옵니다.';
+        document.getElementById('copyTranscriptBtn').style.display = 'none';
         switchTab('stats', document.querySelector('.modal-tab'));
     }
 
@@ -2533,8 +2537,10 @@
 
             if (data.transcript) {
                 box.textContent = data.transcript;
+                document.getElementById('copyTranscriptBtn').style.display = '';
                 return;
             }
+            document.getElementById('copyTranscriptBtn').style.display = 'none';
 
             const manualUI = `
                 <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
@@ -2577,6 +2583,16 @@
         }
     }
 
+    function copyTranscript() {
+        const text = document.getElementById('transcriptBox').textContent;
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = document.getElementById('copyTranscriptBtn');
+            btn.innerHTML = '<i class="fas fa-check"></i> 복사됨';
+            setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy"></i> 복사'; }, 2000);
+        });
+    }
+
     async function submitManualTranscript(videoId) {
         const textarea = document.getElementById('manualTranscript');
         const text = textarea.value.trim();
@@ -2589,7 +2605,7 @@
                 body: JSON.stringify({transcript: cleaned})
             });
             const data = await res.json();
-            if (data.ok) document.getElementById('transcriptBox').textContent = cleaned;
+            if (data.ok) { document.getElementById('transcriptBox').textContent = cleaned; document.getElementById('copyTranscriptBtn').style.display = ''; }
             else alert('저장 실패: ' + (data.error || ''));
         } catch(e) { alert('저장 중 오류 발생'); }
     }
