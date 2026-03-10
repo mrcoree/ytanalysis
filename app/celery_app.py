@@ -32,6 +32,10 @@ celery.conf.beat_schedule = {
         "task": "app.tasks.check_channel_new_videos",
         "schedule": 900.0,  # 15분
     },
+    "auto-search-watched-keywords-daily": {
+        "task": "app.tasks.auto_search_watched_keywords",
+        "schedule": crontab(hour="6,18", minute=0),  # 하루 2회: 오전 6시, 오후 6시
+    },
     "cleanup-old-data-daily": {
         "task": "app.tasks.cleanup_old_data",
         "schedule": crontab(hour=4, minute=0),  # 매일 새벽 4시

@@ -1538,6 +1538,20 @@
             </div>
         </div>
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
+            <div style="font-weight:600;margin-bottom:4px"><i class="fas fa-star"></i> 관심 키워드</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">
+                등록한 키워드는 하루 2회 자동 검색되어 새 영상이 추적됩니다. (최대 <span id="watchedMax">5</span>개)
+            </div>
+            <div id="watchedKeywordList" style="margin-bottom:12px"></div>
+            <div style="display:flex;gap:8px">
+                <input type="text" id="watchedKeywordInput" placeholder="키워드 입력..." maxlength="100"
+                    style="flex:1;padding:10px 14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;font-family:inherit;outline:none"
+                    onkeydown="if(event.key==='Enter')addWatchedKeyword()" />
+                <button onclick="addWatchedKeyword()" style="padding:8px 20px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer">추가</button>
+            </div>
+            <div style="font-size:12px;color:var(--fire);margin-top:6px" id="watchedError"></div>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
             <div style="font-weight:600;margin-bottom:16px"><i class="fas fa-lock"></i> 비밀번호 변경</div>
             <div class="auth-field" style="margin-bottom:12px">
                 <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px">현재 비밀번호</label>
@@ -3678,6 +3692,52 @@
             document.getElementById('settingsCreatedAt').textContent = s.created_at ? new Date(s.created_at).toLocaleDateString('ko-KR') : '-';
             document.getElementById('settingsApiKey').value = s.youtube_api_key || '';
             document.getElementById('apiKeysCount').textContent = `등록된 키: ${k.total}개 (사용자 ${k.user_keys} + 시스템 ${k.has_system_key ? 1 : 0})`;
+        } catch(e) {}
+        loadWatchedKeywords();
+    }
+
+    // ===== Watched Keywords =====
+    async function loadWatchedKeywords() {
+        try {
+            const res = await authFetch(`${API}/watched-keywords`);
+            const data = await res.json();
+            const list = document.getElementById('watchedKeywordList');
+            document.getElementById('watchedMax').textContent = data.max;
+            if (!data.keywords.length) {
+                list.innerHTML = '<div style="font-size:13px;color:var(--text-muted);padding:8px 0">등록된 관심 키워드가 없습니다</div>';
+                return;
+            }
+            list.innerHTML = data.keywords.map(k => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg-secondary);border-radius:8px;margin-bottom:6px">
+                    <span style="font-size:14px;font-weight:500">${k.keyword}</span>
+                    <button onclick="removeWatchedKeyword(${k.id})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:4px 8px" title="삭제"><i class="fas fa-times"></i></button>
+                </div>
+            `).join('');
+        } catch(e) {}
+    }
+
+    async function addWatchedKeyword() {
+        const input = document.getElementById('watchedKeywordInput');
+        const keyword = input.value.trim();
+        const errEl = document.getElementById('watchedError');
+        errEl.textContent = '';
+        if (!keyword) return;
+        try {
+            const res = await authFetch(`${API}/watched-keywords?keyword=${encodeURIComponent(keyword)}`, {method:'POST'});
+            if (!res.ok) {
+                const data = await res.json();
+                errEl.textContent = data.detail || '등록 실패';
+                return;
+            }
+            input.value = '';
+            loadWatchedKeywords();
+        } catch(e) { errEl.textContent = '서버 연결 실패'; }
+    }
+
+    async function removeWatchedKeyword(id) {
+        try {
+            await authFetch(`${API}/watched-keywords/${id}`, {method:'DELETE'});
+            loadWatchedKeywords();
         } catch(e) {}
     }
 

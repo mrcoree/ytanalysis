@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.db.models import Video, Analysis, SearchHistory, VideoStats, User
+from app.db.models import Video, Analysis, SearchHistory, VideoStats, User, WatchedKeyword
 from app.crawler.youtube_search import discover_and_store
 from app.api.shared import build_video_response, batch_latest_stats, get_blacklisted_channel_ids, filter_by_duration, filter_by_period, get_current_user
 
@@ -114,3 +114,67 @@ def get_video(video_id: str, db: Session = Depends(get_db), current_user: User =
     )
 
     return build_video_response(video, analysis=analysis, latest_stat=latest_stat)
+
+
+MAX_WATCHED_KEYWORDS = 5
+
+
+@router.get("/watched-keywords")
+def get_watched_keywords(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """관심 키워드 목록 조회"""
+    rows = (
+        db.query(WatchedKeyword)
+        .filter(WatchedKeyword.user_id == current_user.id)
+        .order_by(WatchedKeyword.created_at)
+        .all()
+    )
+    return {
+        "keywords": [{"id": r.id, "keyword": r.keyword, "created_at": r.created_at} for r in rows],
+        "max": MAX_WATCHED_KEYWORDS,
+    }
+
+
+@router.post("/watched-keywords")
+def add_watched_keyword(
+    keyword: str = Query(..., min_length=1, max_length=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """관심 키워드 등록 (최대 5개)"""
+    keyword = keyword.strip()
+    count = db.query(WatchedKeyword).filter(WatchedKeyword.user_id == current_user.id).count()
+    if count >= MAX_WATCHED_KEYWORDS:
+        raise HTTPException(status_code=400, detail=f"관심 키워드는 최대 {MAX_WATCHED_KEYWORDS}개까지 등록할 수 있습니다")
+
+    existing = db.query(WatchedKeyword).filter(
+        WatchedKeyword.user_id == current_user.id,
+        WatchedKeyword.keyword == keyword,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="이미 등록된 키워드입니다")
+
+    wk = WatchedKeyword(user_id=current_user.id, keyword=keyword)
+    db.add(wk)
+    db.commit()
+    return {"ok": True, "id": wk.id, "keyword": wk.keyword}
+
+
+@router.delete("/watched-keywords/{keyword_id}")
+def delete_watched_keyword(
+    keyword_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """관심 키워드 삭제"""
+    wk = db.query(WatchedKeyword).filter(
+        WatchedKeyword.id == keyword_id,
+        WatchedKeyword.user_id == current_user.id,
+    ).first()
+    if not wk:
+        raise HTTPException(status_code=404, detail="키워드를 찾을 수 없습니다")
+    db.delete(wk)
+    db.commit()
+    return {"ok": True}

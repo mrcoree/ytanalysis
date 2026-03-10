@@ -8,7 +8,7 @@ from app.db.database import get_db
 from app.db.models import (
     User, Video, VideoStats, Analysis, Bookmark,
     ChannelBlacklist, ChannelBookmark, ChannelNotification,
-    VideoMemo, Reference, SearchHistory,
+    VideoMemo, Reference, SearchHistory, WatchedKeyword,
 )
 from app.api.shared import get_current_user
 
@@ -63,6 +63,7 @@ def delete_user(
     db.query(ChannelBookmark).filter(ChannelBookmark.user_id == user_id).delete()
     db.query(VideoMemo).filter(VideoMemo.user_id == user_id).delete()
     db.query(Reference).filter(Reference.user_id == user_id).delete()
+    db.query(WatchedKeyword).filter(WatchedKeyword.user_id == user_id).delete()
     db.query(User).filter(User.id == user_id).delete()
     db.commit()
     return {"ok": True}

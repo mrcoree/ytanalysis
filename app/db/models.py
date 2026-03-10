@@ -145,6 +145,16 @@ class VideoMemo(Base):
     video = relationship("Video")
 
 
+class WatchedKeyword(Base):
+    __tablename__ = "watched_keywords"
+    __table_args__ = (UniqueConstraint("user_id", "keyword"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    keyword = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class Reference(Base):
     __tablename__ = "references"
 

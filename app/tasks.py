@@ -5,7 +5,7 @@ from app.celery_app import celery
 from app.db.database import SessionLocal
 from app.crawler.stats_collector import collect_and_analyze
 from app.crawler.youtube_search import discover_and_store
-from app.db.models import SearchHistory, VideoStats, ChannelBookmark, ChannelNotification, Video
+from app.db.models import SearchHistory, VideoStats, ChannelBookmark, ChannelNotification, Video, WatchedKeyword
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,48 @@ def check_channel_new_videos():
     except Exception:
         db.rollback()
         logger.exception("check_channel_new_videos failed")
+    finally:
+        db.close()
+
+
+@celery.task(name="app.tasks.auto_search_watched_keywords")
+def auto_search_watched_keywords():
+    """관심 키워드 자동 검색 — 모든 사용자의 등록 키워드를 검색하여 새 영상 발견"""
+    db = SessionLocal()
+    try:
+        watched = db.query(WatchedKeyword).all()
+        if not watched:
+            return
+
+        # 사용자별로 그룹핑하여 SearchHistory에 user_id 연결
+        user_keywords = {}
+        for wk in watched:
+            user_keywords.setdefault(wk.user_id, []).append(wk.keyword)
+
+        # 중복 제거된 키워드 목록
+        unique_keywords = list({wk.keyword for wk in watched})
+        logger.info("auto_search_watched_keywords: %d keywords from %d users",
+                     len(unique_keywords), len(user_keywords))
+
+        for keyword in unique_keywords:
+            try:
+                discover_and_store(db, keyword, max_results=30)
+            except Exception:
+                db.rollback()
+                logger.exception("auto_search_watched failed for keyword=%s", keyword)
+
+        # 각 사용자의 SearchHistory에 기록 (개인화 연결용)
+        for user_id, keywords in user_keywords.items():
+            for kw in keywords:
+                db.add(SearchHistory(keyword=kw, user_id=user_id))
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+
+    except Exception:
+        db.rollback()
+        logger.exception("auto_search_watched_keywords failed")
     finally:
         db.close()
 
