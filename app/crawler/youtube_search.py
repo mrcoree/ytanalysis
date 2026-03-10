@@ -56,11 +56,14 @@ def search_videos(keyword: str, max_results: int = 50, duration: str | None = No
             if published:
                 published_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
 
+            channel_id = snippet.get("channelId", "")
+            if not channel_id:
+                continue
             video_ids.append(vid)
             videos.append({
                 "video_id": vid,
                 "title": html.unescape(snippet["title"]),
-                "channel_id": snippet["channelId"],
+                "channel_id": channel_id,
                 "channel_title": snippet.get("channelTitle", ""),
                 "description": snippet.get("description", ""),
                 "thumbnail": snippet.get("thumbnails", {}).get("high", {}).get("url", ""),
@@ -200,7 +203,10 @@ def discover_and_store(db: Session, keyword: str, max_results: int = 50, duratio
         ).first()
         if not exists:
             db.add(VideoKeyword(video_id=v["video_id"], keyword=keyword))
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
 
     # search_videos에서 이미 가져온 통계를 바로 저장 (추가 API 호출 없음)
     stats_list = [
