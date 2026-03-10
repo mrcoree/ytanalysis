@@ -193,10 +193,10 @@ def collect_and_analyze(db: Session, tier: str = "recent"):
 
     logger.info("collect_and_analyze [%s]: %d videos", tier, len(video_ids))
 
-    # 설명이 없거나 잘린 영상이 있으면 snippet도 함께 조회
+    # 설명이 없거나 잘린("..."로 끝남) 영상이 있으면 snippet도 함께 조회
     need_desc = db.query(Video.video_id).filter(
         Video.video_id.in_(video_ids),
-        (Video.description.is_(None)) | (Video.description == "")
+        (Video.description.is_(None)) | (Video.description == "") | (Video.description.like("%..."))
     ).count() > 0
     stats_list = fetch_video_stats(video_ids, include_snippet=need_desc)
     _save_stats_and_analyze(db, stats_list)
