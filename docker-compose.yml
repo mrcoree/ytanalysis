@@ -22,7 +22,7 @@ services:
 
   worker:
     build: .
-    command: celery -A app.celery_app:celery worker --beat --loglevel=info
+    command: celery -A app.celery_app:celery worker --beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     environment:
       - DATABASE_URL=postgresql://viral:${POSTGRES_PASSWORD}@postgres:5432/viral_radar
       - REDIS_URL=redis://redis:6379/0
