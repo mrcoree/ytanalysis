@@ -1321,6 +1321,7 @@
         <button class="nav-btn" onclick="showPage('channels')"><i class="fas fa-tv"></i> <span>채널</span></button>
         <button class="nav-btn" onclick="showPage('insights')"><i class="fas fa-lightbulb"></i> <span>인사이트</span></button>
         <button class="nav-btn" onclick="showPage('reference')"><i class="fas fa-palette"></i> <span>레퍼런스</span></button>
+        <button class="nav-btn" id="adminNavBtn" onclick="showPage('admin')" style="display:none"><i class="fas fa-shield-alt"></i> <span>관리자</span></button>
         <div class="notif-wrapper">
             <button class="notif-bell" onclick="toggleNotifPanel(event)" aria-label="알림">
                 <i class="fas fa-bell"></i>
@@ -1558,6 +1559,22 @@
             </div>
             <button onclick="confirmDeleteAccount()" style="padding:8px 20px;background:transparent;border:1px solid var(--fire);color:var(--fire);border-radius:8px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer">회원 탈퇴</button>
         </div>
+    </div>
+</div>
+
+<!-- ===== Admin Page ===== -->
+<div class="page" id="pageAdmin">
+    <h1 class="search-title" style="margin-bottom:24px"><i class="fas fa-shield-alt" style="color:var(--accent-light)"></i> 관리자</h1>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px" id="adminStatsGrid">
+        <div class="dash-card"><div class="dash-label">전체 사용자</div><div class="dash-value accent" id="adminTotalUsers">-</div></div>
+        <div class="dash-card"><div class="dash-label">API 키 등록</div><div class="dash-value green" id="adminApiKeyUsers">-</div></div>
+        <div class="dash-card"><div class="dash-label">전체 영상</div><div class="dash-value yellow" id="adminTotalVideos">-</div></div>
+        <div class="dash-card"><div class="dash-label">통계 레코드</div><div class="dash-value" id="adminTotalStats" style="color:var(--text-secondary)">-</div></div>
+        <div class="dash-card"><div class="dash-label">최근 수집</div><div class="dash-value" id="adminLatestCollection" style="font-size:14px;color:var(--text-secondary)">-</div></div>
+    </div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px">
+        <div style="font-weight:600;margin-bottom:16px"><i class="fas fa-users"></i> 사용자 관리</div>
+        <div id="adminUserList" style="font-size:14px">로딩 중...</div>
     </div>
 </div>
 
@@ -1823,6 +1840,7 @@
     }
 
     let hasApiKey = false;
+    let isAdmin = false;
 
     async function checkApiKey() {
         try {
@@ -1830,6 +1848,17 @@
             const data = await res.json();
             hasApiKey = data.has_api_key || false;
         } catch { hasApiKey = false; }
+        // admin 체크
+        try {
+            const me = await authFetch(`${API}/auth/me`);
+            const meData = await me.json();
+            // admin 여부는 /admin/stats 호출 성공으로 판별
+            const adminRes = await authFetch(`${API}/admin/stats`);
+            isAdmin = adminRes.ok;
+        } catch { isAdmin = false; }
+        // admin 버튼 표시/숨김
+        const adminBtn = document.getElementById('adminNavBtn');
+        if (adminBtn) adminBtn.style.display = isAdmin ? '' : 'none';
         return hasApiKey;
     }
 
@@ -1837,7 +1866,7 @@
         document.getElementById('authOverlay').classList.add('hidden');
         document.getElementById('usernameDisplay').textContent = currentUsername;
         await checkApiKey();
-        if (!hasApiKey) {
+        if (!hasApiKey && !isAdmin) {
             showPage('settings');
             showToast('YouTube API 키를 등록해야 서비스를 이용할 수 있습니다', 'warning');
             return;
@@ -1877,7 +1906,7 @@
     // ===== Page Navigation =====
     function showPage(page) {
         // API 키 없으면 설정 페이지만 허용
-        if (!hasApiKey && page !== 'settings') {
+        if (!hasApiKey && !isAdmin && page !== 'settings') {
             showPage('settings');
             showToast('YouTube API 키를 등록해야 서비스를 이용할 수 있습니다', 'warning');
             return;
@@ -1898,6 +1927,7 @@
         if (page === 'insights') loadInsights();
         if (page === 'reference') loadReferences();
         if (page === 'settings') loadSettings();
+        if (page === 'admin') loadAdmin();
     }
 
     // ===== Dashboard =====
@@ -3490,6 +3520,56 @@
     }
 
     // ===== Settings =====
+    // ===== Admin =====
+    async function loadAdmin() {
+        if (!isAdmin) return;
+        try {
+            const [statsRes, usersRes] = await Promise.all([
+                authFetch(`${API}/admin/stats`),
+                authFetch(`${API}/admin/users`),
+            ]);
+            const stats = await statsRes.json();
+            const users = await usersRes.json();
+            document.getElementById('adminTotalUsers').textContent = stats.total_users;
+            document.getElementById('adminApiKeyUsers').textContent = stats.api_key_users;
+            document.getElementById('adminTotalVideos').textContent = (stats.total_videos || 0).toLocaleString();
+            document.getElementById('adminTotalStats').textContent = (stats.total_stats_records || 0).toLocaleString();
+            document.getElementById('adminLatestCollection').textContent = stats.latest_collection ? new Date(stats.latest_collection).toLocaleString('ko-KR') : '-';
+
+            const list = document.getElementById('adminUserList');
+            if (!users.length) { list.innerHTML = '<div style="color:var(--text-muted)">사용자가 없습니다</div>'; return; }
+            list.innerHTML = `<table style="width:100%;border-collapse:collapse">
+                <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
+                    <th style="padding:8px">ID</th>
+                    <th style="padding:8px">사용자명</th>
+                    <th style="padding:8px">API 키</th>
+                    <th style="padding:8px">가입일</th>
+                    <th style="padding:8px">관리</th>
+                </tr></thead>
+                <tbody>${users.map(u => `<tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:8px;color:var(--text-muted)">${u.id}</td>
+                    <td style="padding:8px">${u.username}${u.is_admin ? ' <span style="color:var(--accent-light);font-size:11px">ADMIN</span>' : ''}</td>
+                    <td style="padding:8px">${u.has_api_key ? '<span style="color:var(--green)">O</span>' : '<span style="color:var(--text-muted)">X</span>'}</td>
+                    <td style="padding:8px;color:var(--text-secondary);font-size:12px">${u.created_at ? new Date(u.created_at).toLocaleDateString('ko-KR') : '-'}</td>
+                    <td style="padding:8px">${u.is_admin ? '' : `<button onclick="adminDeleteUser(${u.id},'${u.username}')" style="padding:4px 10px;background:transparent;border:1px solid var(--fire);color:var(--fire);border-radius:6px;font-size:11px;cursor:pointer">삭제</button>`}</td>
+                </tr>`).join('')}</tbody></table>`;
+        } catch(e) { console.error('Admin load error', e); }
+    }
+
+    async function adminDeleteUser(userId, username) {
+        if (!confirm(`"${username}" 사용자를 정말 삭제하시겠습니까?\n모든 데이터가 영구 삭제됩니다.`)) return;
+        try {
+            const res = await authFetch(`${API}/admin/users/${userId}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast(`${username} 사용자가 삭제되었습니다`);
+                loadAdmin();
+            } else {
+                const data = await res.json();
+                showToast(data.detail || '삭제 실패', 'error');
+            }
+        } catch(e) { showToast('서버 연결 실패', 'error'); }
+    }
+
     async function loadSettings() {
         try {
             const [settingsRes, keysRes] = await Promise.all([

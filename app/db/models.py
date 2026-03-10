@@ -11,6 +11,7 @@ class User(Base):
     username = Column(String, nullable=False, unique=True, index=True)
     password_hash = Column(String, nullable=False)
     youtube_api_key = Column(String, default="")
+    is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

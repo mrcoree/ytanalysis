@@ -7,11 +7,30 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from app.db.database import engine, Base
-from app.api import auth, videos, analytics, transcript, bookmarks, channels, memos, references
+from app.db.database import engine, Base, SessionLocal
+from app.api import auth, videos, analytics, transcript, bookmarks, channels, memos, references, admin
 
 # 테이블 자동 생성
 Base.metadata.create_all(bind=engine)
+
+# admin 계정 자동 생성
+def _ensure_admin():
+    import bcrypt
+    from app.db.models import User
+    db = SessionLocal()
+    try:
+        existing = db.query(User).filter(User.username == "admin").first()
+        if not existing:
+            pw_hash = bcrypt.hashpw("qkrdudwk1021".encode(), bcrypt.gensalt()).decode()
+            db.add(User(username="admin", password_hash=pw_hash, is_admin=True))
+            db.commit()
+        elif not existing.is_admin:
+            existing.is_admin = True
+            db.commit()
+    finally:
+        db.close()
+
+_ensure_admin()
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -69,6 +88,7 @@ app.include_router(bookmarks.router, tags=["Bookmarks"])
 app.include_router(channels.router, tags=["Channels"])
 app.include_router(memos.router, tags=["Memos"])
 app.include_router(references.router, tags=["References"])
+app.include_router(admin.router, tags=["Admin"])
 
 # Static files
 STATIC_DIR = Path(__file__).parent / "static"

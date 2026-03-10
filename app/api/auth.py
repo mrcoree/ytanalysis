@@ -133,7 +133,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
 @router.get("/auth/me")
 def get_me(current_user: User = Depends(get_current_user)):
-    return {"user_id": current_user.id, "username": current_user.username}
+    return {"user_id": current_user.id, "username": current_user.username, "is_admin": current_user.is_admin}
 
 
 # ===== 비밀번호 변경 =====
