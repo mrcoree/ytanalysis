@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://viral:${POSTGRES_PASSWORD}@postgres:5432/viral_radar
+      - REDIS_URL=redis://redis:6379/0
+      - SUBTITLE_PROXY_URL=${SUBTITLE_PROXY_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - .:/app
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+
+  worker:
+    build: .
+    command: celery -A app.celery_app:celery worker --beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://viral:${POSTGRES_PASSWORD}@postgres:5432/viral_radar
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - .:/app
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=viral
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=viral_radar
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U viral -d viral_radar"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+
+volumes:
+  pgdata:
