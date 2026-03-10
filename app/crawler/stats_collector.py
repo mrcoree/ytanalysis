@@ -57,7 +57,11 @@ def _save_stats_and_analyze(db: Session, stats_list: list[dict]):
             collected_at=now,
         )
         db.add(video_stat)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        return
 
     # VPH, 바이럴 스코어, 예측, 성장패턴, 다크호스 계산
     from sqlalchemy import func as sa_func

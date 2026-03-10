@@ -47,7 +47,11 @@ def get_videos(
     db.commit()
 
     # 1. 영상 검색 & DB 저장 (API 실패 시 DB 캐시 사용)
-    videos = discover_and_store(db, keyword, duration=duration, period=period)
+    try:
+        videos = discover_and_store(db, keyword, duration=duration, period=period)
+    except Exception:
+        db.rollback()
+        videos = []
     if not videos:
         from app.db.models import VideoKeyword
         cached_ids = [vk.video_id for vk in
