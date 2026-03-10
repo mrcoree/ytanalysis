@@ -10,8 +10,37 @@ from slowapi.errors import RateLimitExceeded
 from app.db.database import engine, Base, SessionLocal
 from app.api import auth, videos, analytics, transcript, bookmarks, channels, memos, references, admin
 
-# 테이블 자동 생성
+# 테이블 자동 생성 + 누락 컬럼 자동 추가
 Base.metadata.create_all(bind=engine)
+
+def _auto_migrate():
+    """모델에 정의된 컬럼이 DB에 없으면 자동으로 ALTER TABLE ADD COLUMN"""
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue
+        existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
+        for col in table.columns:
+            if col.name not in existing_cols:
+                col_type = col.type.compile(engine.dialect)
+                default = ""
+                if col.default is not None and col.default.arg is not None and not callable(col.default.arg):
+                    val = col.default.arg
+                    default = f" DEFAULT '{val}'" if isinstance(val, str) else f" DEFAULT {val}"
+                nullable = "" if col.nullable else " NOT NULL"
+                # NOT NULL without default will fail on existing rows, make nullable
+                if nullable and not default:
+                    nullable = ""
+                sql = f'ALTER TABLE {table.name} ADD COLUMN {col.name} {col_type}{default}{nullable}'
+                with engine.begin() as conn:
+                    conn.execute(text(sql))
+
+try:
+    _auto_migrate()
+except Exception:
+    pass  # 마이그레이션 실패해도 앱 시작은 진행
 
 # admin 계정 자동 생성
 def _ensure_admin():
