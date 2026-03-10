@@ -1522,21 +1522,6 @@
             </div>
         </div>
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
-            <div style="font-weight:600;margin-bottom:16px"><i class="fas fa-lock"></i> 비밀번호 변경</div>
-            <div class="auth-field" style="margin-bottom:12px">
-                <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px">현재 비밀번호</label>
-                <input type="password" id="currentPassword" style="width:100%;padding:10px 14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;outline:none" />
-            </div>
-            <div class="auth-field" style="margin-bottom:12px">
-                <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px">새 비밀번호</label>
-                <input type="password" id="newPassword" style="width:100%;padding:10px 14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;outline:none" />
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <span style="font-size:12px;color:var(--fire)" id="pwChangeError"></span>
-                <button onclick="changePassword()" style="padding:8px 20px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer">변경</button>
-            </div>
-        </div>
-        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
             <div style="font-weight:600;margin-bottom:4px"><i class="fas fa-key"></i> YouTube API 키</div>
             <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">
                 API 키를 등록하면 모든 사용자가 함께 사용하여 더 많은 데이터를 수집할 수 있습니다.
@@ -1549,6 +1534,21 @@
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:12px;color:var(--text-muted)" id="apiKeysCount">등록된 키: -</span>
                 <button onclick="saveApiKey()" style="padding:8px 20px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer">저장</button>
+            </div>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
+            <div style="font-weight:600;margin-bottom:16px"><i class="fas fa-lock"></i> 비밀번호 변경</div>
+            <div class="auth-field" style="margin-bottom:12px">
+                <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px">현재 비밀번호</label>
+                <input type="password" id="currentPassword" style="width:100%;padding:10px 14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;outline:none" />
+            </div>
+            <div class="auth-field" style="margin-bottom:12px">
+                <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px">새 비밀번호</label>
+                <input type="password" id="newPassword" style="width:100%;padding:10px 14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;outline:none" />
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:12px;color:var(--fire)" id="pwChangeError"></span>
+                <button onclick="changePassword()" style="padding:8px 20px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer">변경</button>
             </div>
         </div>
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;border-color:var(--fire)">
