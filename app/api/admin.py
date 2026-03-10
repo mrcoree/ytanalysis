@@ -94,3 +94,34 @@ def system_stats(
         "api_key_users": api_key_users,
         "latest_collection": latest_stat,
     }
+
+
+@router.get("/search-keywords")
+def search_keywords(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """사용자별 검색 키워드 현황"""
+    rows = (
+        db.query(
+            SearchHistory.user_id,
+            User.username,
+            SearchHistory.keyword,
+            func.count(SearchHistory.id).label("cnt"),
+            func.max(SearchHistory.searched_at).label("last_at"),
+        )
+        .outerjoin(User, SearchHistory.user_id == User.id)
+        .group_by(SearchHistory.user_id, User.username, SearchHistory.keyword)
+        .order_by(func.max(SearchHistory.searched_at).desc())
+        .limit(500)
+        .all()
+    )
+    result = []
+    for r in rows:
+        result.append({
+            "username": r.username or "시스템",
+            "keyword": r.keyword,
+            "count": r.cnt,
+            "last_searched": r.last_at,
+        })
+    return result

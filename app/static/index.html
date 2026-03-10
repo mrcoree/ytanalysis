@@ -1572,9 +1572,21 @@
         <div class="dash-card"><div class="dash-label">통계 레코드</div><div class="dash-value" id="adminTotalStats" style="color:var(--text-secondary)">-</div></div>
         <div class="dash-card"><div class="dash-label">최근 수집</div><div class="dash-value" id="adminLatestCollection" style="font-size:14px;color:var(--text-secondary)">-</div></div>
     </div>
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px">
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
         <div style="font-weight:600;margin-bottom:16px"><i class="fas fa-users"></i> 사용자 관리</div>
         <div id="adminUserList" style="font-size:14px">로딩 중...</div>
+    </div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div style="font-weight:600"><i class="fas fa-search"></i> 검색 키워드</div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="text" id="adminKeywordFilter" placeholder="키워드 검색..." oninput="filterAdminKeywords()" style="padding:6px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:12px;font-family:inherit;outline:none;width:160px" />
+                <select id="adminUserFilter" onchange="filterAdminKeywords()" style="padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:12px;font-family:inherit;outline:none">
+                    <option value="">전체 사용자</option>
+                </select>
+            </div>
+        </div>
+        <div id="adminKeywordList" style="font-size:13px;max-height:500px;overflow-y:auto">로딩 중...</div>
     </div>
 </div>
 
@@ -3521,15 +3533,19 @@
 
     // ===== Settings =====
     // ===== Admin =====
+    let _adminKeywords = [];
+
     async function loadAdmin() {
         if (!isAdmin) return;
         try {
-            const [statsRes, usersRes] = await Promise.all([
+            const [statsRes, usersRes, kwRes] = await Promise.all([
                 authFetch(`${API}/admin/stats`),
                 authFetch(`${API}/admin/users`),
+                authFetch(`${API}/admin/search-keywords`),
             ]);
             const stats = await statsRes.json();
             const users = await usersRes.json();
+            _adminKeywords = await kwRes.json();
             document.getElementById('adminTotalUsers').textContent = stats.total_users;
             document.getElementById('adminApiKeyUsers').textContent = stats.api_key_users;
             document.getElementById('adminTotalVideos').textContent = (stats.total_videos || 0).toLocaleString();
@@ -3553,7 +3569,60 @@
                     <td style="padding:8px;color:var(--text-secondary);font-size:12px">${u.created_at ? new Date(u.created_at).toLocaleDateString('ko-KR') : '-'}</td>
                     <td style="padding:8px">${u.is_admin ? '' : `<button onclick="adminDeleteUser(${u.id},'${u.username}')" style="padding:4px 10px;background:transparent;border:1px solid var(--fire);color:var(--fire);border-radius:6px;font-size:11px;cursor:pointer">삭제</button>`}</td>
                 </tr>`).join('')}</tbody></table>`;
+            // 사용자 필터 드롭다운 채우기
+            const userFilter = document.getElementById('adminUserFilter');
+            const usernames = [...new Set(_adminKeywords.map(k => k.username))];
+            userFilter.innerHTML = '<option value="">전체 사용자</option>' + usernames.map(u => `<option value="${u}">${u}</option>`).join('');
+            renderAdminKeywords(_adminKeywords);
         } catch(e) { console.error('Admin load error', e); }
+    }
+
+    function filterAdminKeywords() {
+        const kw = document.getElementById('adminKeywordFilter').value.toLowerCase();
+        const user = document.getElementById('adminUserFilter').value;
+        let filtered = _adminKeywords;
+        if (user) filtered = filtered.filter(k => k.username === user);
+        if (kw) filtered = filtered.filter(k => k.keyword.toLowerCase().includes(kw));
+        renderAdminKeywords(filtered);
+    }
+
+    function renderAdminKeywords(keywords) {
+        const container = document.getElementById('adminKeywordList');
+        if (!keywords.length) { container.innerHTML = '<div style="color:var(--text-muted);padding:12px">검색 기록이 없습니다</div>'; return; }
+
+        // 사용자별로 그룹핑
+        const byUser = {};
+        for (const k of keywords) {
+            if (!byUser[k.username]) byUser[k.username] = [];
+            byUser[k.username].push(k);
+        }
+
+        let html = '';
+        for (const [username, kws] of Object.entries(byUser)) {
+            html += `<div style="margin-bottom:16px">
+                <div style="font-weight:600;font-size:13px;color:var(--accent-light);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+                    <i class="fas fa-user" style="margin-right:4px"></i> ${username} <span style="color:var(--text-muted);font-weight:400">(${kws.length}개)</span>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">`;
+            for (const k of kws) {
+                const timeAgo = k.last_searched ? getTimeAgo(new Date(k.last_searched)) : '';
+                html += `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:16px;font-size:12px;color:var(--text-primary)" title="${timeAgo} / ${k.count}회">
+                    ${k.keyword} <span style="color:var(--text-muted);font-size:10px">${k.count > 1 ? 'x' + k.count : ''}</span>
+                </span>`;
+            }
+            html += `</div></div>`;
+        }
+        container.innerHTML = html;
+    }
+
+    function getTimeAgo(date) {
+        const diff = Date.now() - date.getTime();
+        const min = Math.floor(diff / 60000);
+        if (min < 60) return min + '분 전';
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return hr + '시간 전';
+        const day = Math.floor(hr / 24);
+        return day + '일 전';
     }
 
     async function adminDeleteUser(userId, username) {
