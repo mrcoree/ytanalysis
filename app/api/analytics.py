@@ -13,6 +13,16 @@ import io
 router = APIRouter()
 
 
+def _get_user_video_ids(db: Session, user_id: int) -> list[str]:
+    """사용자가 검색한 키워드에 연결된 영상 ID 목록"""
+    user_kws = [k[0] for k in db.query(SearchHistory.keyword).filter(
+        SearchHistory.user_id == user_id).distinct().all()]
+    if not user_kws:
+        return []
+    return [v[0] for v in db.query(VideoKeyword.video_id).filter(
+        VideoKeyword.keyword.in_(user_kws)).distinct().all()]
+
+
 @router.get("/video/{video_id}/stats")
 def get_video_stats(video_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """영상의 조회수 이력 반환"""
@@ -67,9 +77,11 @@ def get_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """대시보드 통계"""
-    total_videos = db.query(func.count(Video.video_id)).scalar() or 0
-    total_stats = db.query(func.count(VideoStats.id)).scalar() or 0
+    """대시보드 통계 (사용자 검색 영상만)"""
+    _my_vids = _get_user_video_ids(db, current_user.id)
+    total_videos = len(_my_vids)
+    total_stats = db.query(func.count(VideoStats.id)).filter(
+        VideoStats.video_id.in_(_my_vids)).scalar() if _my_vids else 0
 
     # 최근 검색 키워드 TOP 5 (본인 검색만)
     cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
@@ -82,31 +94,14 @@ def get_dashboard(
         .all()
     )
 
-    # 사용자가 검색한 키워드에 연결된 영상 ID만 추출
     blacklisted = get_blacklisted_channel_ids(db, current_user.id)
-
-    user_keywords = (
-        db.query(SearchHistory.keyword)
-        .filter(SearchHistory.user_id == current_user.id)
-        .distinct()
-        .all()
-    )
-    user_kw_list = [k[0] for k in user_keywords]
-
-    # 사용자가 검색한 키워드에 연결된 영상 ID
-    if user_kw_list:
-        my_video_ids = [vk[0] for vk in db.query(VideoKeyword.video_id).filter(
-            VideoKeyword.keyword.in_(user_kw_list)
-        ).distinct().all()]
-    else:
-        my_video_ids = []
 
     def apply_filters(query):
         if keyword:
             safe_kw = keyword.replace("%", "\\%").replace("_", "\\_")
             query = query.filter(Video.title.ilike(f"%{safe_kw}%", escape="\\"))
-        elif my_video_ids:
-            query = query.filter(Video.video_id.in_(my_video_ids))
+        elif _my_vids:
+            query = query.filter(Video.video_id.in_(_my_vids))
         if blacklisted:
             query = query.filter(Video.channel_id.notin_(blacklisted))
         return query
@@ -236,7 +231,8 @@ def export_csv(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """검색 결과를 CSV로 내보내기"""
+    """검색 결과를 CSV로 내보내기 (사용자 검색 영상만)"""
+    my_vids = _get_user_video_ids(db, current_user.id)
     query = (
         db.query(Video, Analysis)
         .outerjoin(Analysis, Video.video_id == Analysis.video_id)
@@ -245,6 +241,8 @@ def export_csv(
     if keyword:
         safe_kw = keyword.replace("%", "\\%").replace("_", "\\_")
         query = query.filter(Video.title.ilike(f"%{safe_kw}%", escape="\\"))
+    elif my_vids:
+        query = query.filter(Video.video_id.in_(my_vids))
 
     query = query.order_by(desc(Analysis.score))
     rows = query.limit(500).all()
@@ -286,19 +284,19 @@ def export_csv(
 
 @router.get("/title-patterns")
 def get_title_patterns(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """떡상 영상 제목 패턴 분석"""
+    """떡상 영상 제목 패턴 분석 (사용자 검색 영상만)"""
     import re
     from collections import Counter
 
-    # VPH 높은 영상 상위 200개
-    rows = (
+    my_vids = _get_user_video_ids(db, current_user.id)
+    query = (
         db.query(Video.title, Analysis.vph)
         .join(Analysis, Video.video_id == Analysis.video_id)
         .filter(Analysis.vph > 0)
-        .order_by(desc(Analysis.vph))
-        .limit(200)
-        .all()
     )
+    if my_vids:
+        query = query.filter(Video.video_id.in_(my_vids))
+    rows = query.order_by(desc(Analysis.vph)).limit(200).all()
 
     if not rows:
         return {"patterns": [], "top_bigrams": [], "total_analyzed": 0}
@@ -353,13 +351,16 @@ def get_title_patterns(db: Session = Depends(get_db), current_user: User = Depen
 
 @router.get("/upload-time-analysis")
 def get_upload_time_analysis(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """최적 업로드 시간 분석 - 요일/시간대별 평균 VPH"""
-    rows = (
+    """최적 업로드 시간 분석 - 요일/시간대별 평균 VPH (사용자 검색 영상만)"""
+    my_vids = _get_user_video_ids(db, current_user.id)
+    query = (
         db.query(Video.published_at, Analysis.vph)
         .join(Analysis, Video.video_id == Analysis.video_id)
         .filter(Video.published_at.isnot(None), Analysis.vph > 0)
-        .all()
     )
+    if my_vids:
+        query = query.filter(Video.video_id.in_(my_vids))
+    rows = query.all()
 
     if not rows:
         return {"heatmap": [], "best_times": []}
