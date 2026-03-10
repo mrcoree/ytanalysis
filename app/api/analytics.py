@@ -4,7 +4,7 @@ from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from app.db.database import get_db
-from app.db.models import Video, VideoStats, Analysis, SearchHistory, User
+from app.db.models import Video, VideoStats, Analysis, SearchHistory, VideoKeyword, User
 from app.api.shared import build_video_response, batch_latest_stats, get_blacklisted_channel_ids, duration_to_seconds, get_current_user, sanitize_csv_field
 import csv
 import html
@@ -71,24 +71,42 @@ def get_dashboard(
     total_videos = db.query(func.count(Video.video_id)).scalar() or 0
     total_stats = db.query(func.count(VideoStats.id)).scalar() or 0
 
-    # 최근 검색 키워드 TOP 5
+    # 최근 검색 키워드 TOP 5 (본인 검색만)
     cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
     recent_keywords = (
         db.query(SearchHistory.keyword, func.count(SearchHistory.id).label("cnt"))
-        .filter(SearchHistory.searched_at >= cutoff_24h)
+        .filter(SearchHistory.searched_at >= cutoff_24h, SearchHistory.user_id == current_user.id)
         .group_by(SearchHistory.keyword)
         .order_by(desc("cnt"))
         .limit(5)
         .all()
     )
 
-    # 키워드 필터: 선택된 키워드가 있으면 해당 키워드만, 없으면 전체
+    # 사용자가 검색한 키워드에 연결된 영상 ID만 추출
     blacklisted = get_blacklisted_channel_ids(db, current_user.id)
+
+    user_keywords = (
+        db.query(SearchHistory.keyword)
+        .filter(SearchHistory.user_id == current_user.id)
+        .distinct()
+        .all()
+    )
+    user_kw_list = [k[0] for k in user_keywords]
+
+    # 사용자가 검색한 키워드에 연결된 영상 ID
+    if user_kw_list:
+        my_video_ids = [vk[0] for vk in db.query(VideoKeyword.video_id).filter(
+            VideoKeyword.keyword.in_(user_kw_list)
+        ).distinct().all()]
+    else:
+        my_video_ids = []
 
     def apply_filters(query):
         if keyword:
             safe_kw = keyword.replace("%", "\\%").replace("_", "\\_")
             query = query.filter(Video.title.ilike(f"%{safe_kw}%", escape="\\"))
+        elif my_video_ids:
+            query = query.filter(Video.video_id.in_(my_video_ids))
         if blacklisted:
             query = query.filter(Video.channel_id.notin_(blacklisted))
         return query
