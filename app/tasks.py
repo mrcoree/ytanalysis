@@ -286,14 +286,66 @@ def auto_search_watched_keywords():
 
 @celery.task(name="app.tasks.cleanup_old_data")
 def cleanup_old_data():
-    """매일 오래된 통계 데이터 정리 (30일 이상)"""
+    """매일 30일+ 통계를 일별 1개로 압축 + 90일+ 검색기록 정리"""
+    from sqlalchemy import func as sa_func, cast, Date
+
     db = SessionLocal()
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-        deleted = db.query(VideoStats).filter(VideoStats.collected_at < cutoff).delete()
-        db.commit()
 
-        # 오래된 검색 기록도 정리 (90일 이상)
+        # 30일 이전 데이터가 있는 영상 목록
+        old_video_ids = [
+            v[0] for v in db.query(VideoStats.video_id)
+            .filter(VideoStats.collected_at < cutoff)
+            .distinct()
+            .all()
+        ]
+
+        if old_video_ids:
+            compressed = 0
+            deleted = 0
+            for vid in old_video_ids:
+                # 해당 영상의 30일 이전 데이터를 날짜별로 그룹핑
+                daily_stats = (
+                    db.query(
+                        cast(VideoStats.collected_at, Date).label("day"),
+                        sa_func.max(VideoStats.views).label("views"),
+                        sa_func.max(VideoStats.likes).label("likes"),
+                        sa_func.max(VideoStats.comments).label("comments"),
+                    )
+                    .filter(VideoStats.video_id == vid, VideoStats.collected_at < cutoff)
+                    .group_by(cast(VideoStats.collected_at, Date))
+                    .all()
+                )
+
+                # 날짜별 대표 1개 데이터 생성
+                daily_entries = []
+                for row in daily_stats:
+                    daily_entries.append(VideoStats(
+                        video_id=vid,
+                        views=row.views,
+                        likes=row.likes,
+                        comments=row.comments,
+                        collected_at=datetime.combine(row.day, datetime.min.time()).replace(hour=23, minute=59, tzinfo=timezone.utc),
+                    ))
+
+                # 기존 30일 이전 데이터 삭제
+                del_count = db.query(VideoStats).filter(
+                    VideoStats.video_id == vid,
+                    VideoStats.collected_at < cutoff,
+                ).delete()
+                deleted += del_count
+
+                # 압축된 일별 데이터 삽입
+                for entry in daily_entries:
+                    db.add(entry)
+                    compressed += 1
+
+            db.commit()
+            logger.info("cleanup_old_data: compressed %d old records into %d daily summaries",
+                        deleted, compressed)
+
+        # 오래된 검색 기록 정리 (90일 이상)
         search_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
         db.query(SearchHistory).filter(SearchHistory.searched_at < search_cutoff).delete()
         db.commit()
