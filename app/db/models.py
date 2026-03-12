@@ -29,6 +29,8 @@ class Video(Base):
     tags = Column(Text, default="")  # 쉼표 구분 태그
     category_id = Column(String, default="")  # YouTube 카테고리 ID
     subscriber_count = Column(BigInteger, default=0)  # 채널 구독자 수
+    channel_total_videos = Column(Integer, default=0)  # 채널 총 영상 수
+    channel_created_at = Column(DateTime)  # 채널 개설일
 
     stats = relationship("VideoStats", back_populates="video", order_by="VideoStats.collected_at.desc()")
     analysis = relationship("Analysis", back_populates="video", uselist=False)

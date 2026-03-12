@@ -132,12 +132,13 @@ def collect_stats_for_videos(db: Session, video_ids: list[str]):
     _save_stats_and_analyze(db, stats_list)
 
 
-def _update_subscriber_counts(db: Session):
-    """구독자 수가 0인 영상의 채널 구독자 수를 업데이트"""
-    from app.crawler.youtube_search import _fetch_subscriber_counts
+def _update_channel_info(db: Session):
+    """채널 정보(구독자, 영상수, 개설일)가 없는 영상을 업데이트"""
+    from app.crawler.youtube_search import _fetch_channel_details
 
     videos = db.query(Video).filter(
         (Video.subscriber_count == 0) | (Video.subscriber_count.is_(None))
+        | (Video.channel_total_videos == 0) | (Video.channel_total_videos.is_(None))
     ).all()
     if not videos:
         return
@@ -146,11 +147,19 @@ def _update_subscriber_counts(db: Session):
     if not channel_ids:
         return
 
-    sub_counts = _fetch_subscriber_counts(channel_ids)
+    channel_info = _fetch_channel_details(channel_ids)
     for video in videos:
-        count = sub_counts.get(video.channel_id, 0)
-        if count > 0:
-            video.subscriber_count = count
+        info = channel_info.get(video.channel_id)
+        if not info:
+            continue
+        if info["subscriber_count"] > 0 and (not video.subscriber_count or video.subscriber_count == 0):
+            video.subscriber_count = info["subscriber_count"]
+        if info["total_videos"] > 0 and (not video.channel_total_videos or video.channel_total_videos == 0):
+            video.channel_total_videos = info["total_videos"]
+        if info["created_at"] and not video.channel_created_at:
+            video.channel_created_at = info["created_at"]
+        if info["title"] and not video.channel_title:
+            video.channel_title = info["title"]
     db.commit()
 
 
@@ -201,6 +210,6 @@ def collect_and_analyze(db: Session, tier: str = "recent"):
     stats_list = fetch_video_stats(video_ids, include_snippet=need_desc)
     _save_stats_and_analyze(db, stats_list)
 
-    # 구독자 수 업데이트 (recent 티어에서만, 중복 방지)
+    # 채널 정보 업데이트 (recent 티어에서만, 중복 방지)
     if tier == "recent":
-        _update_subscriber_counts(db)
+        _update_channel_info(db)

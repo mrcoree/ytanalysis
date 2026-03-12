@@ -1641,6 +1641,50 @@
             <div class="loading"><div class="spinner"></div></div>
         </div>
     </div>
+
+    <!-- 블루오션 키워드 + 트렌드 감지 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px" id="insightGrid2">
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px">
+            <h3 style="font-size:16px;font-weight:700;margin-bottom:16px"><i class="fas fa-gem" style="color:var(--accent-light);margin-right:8px"></i>블루오션 키워드</h3>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">VPH 높은데 영상 수 적은 키워드 = 경쟁 낮고 수요 높음</p>
+            <div id="blueOceanArea" style="min-height:150px">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px">
+            <h3 style="font-size:16px;font-weight:700;margin-bottom:16px"><i class="fas fa-fire-alt" style="color:var(--fire);margin-right:8px"></i>트렌드 감지</h3>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">최근 2일 VPH가 전체 평균 대비 급상승한 키워드</p>
+            <div id="trendArea" style="min-height:150px">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 최적 영상 길이 -->
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:24px">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px"><i class="fas fa-ruler-horizontal" style="color:var(--yellow);margin-right:8px"></i>최적 영상 길이</h3>
+        <div id="durationAnalysisArea" style="min-height:100px">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+    </div>
+
+    <!-- 소형 채널 떡상 -->
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:24px">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px"><i class="fas fa-rocket" style="color:var(--green);margin-right:8px"></i>소형 채널 떡상</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">구독자 1만 이하인데 조회수가 폭발한 영상</p>
+        <div id="smallChannelArea" style="min-height:100px">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+    </div>
+
+    <!-- 참여율 분석 -->
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:24px">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px"><i class="fas fa-heart" style="color:var(--fire);margin-right:8px"></i>참여율 TOP 영상</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">좋아요/댓글 비율이 높은 영상 — 알고리즘이 선호하는 콘텐츠</p>
+        <div id="engagementArea" style="min-height:100px">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+    </div>
 </div>
 
 <!-- ===== Reference Page ===== -->
@@ -3281,6 +3325,132 @@
                     heatDiv.innerHTML = '<div style="color:var(--text-muted);font-size:13px">데이터 부족</div>';
                 }
             } catch(e) { console.error('Upload time analysis failed', e); }
+
+            // === 블루오션 키워드 ===
+            try {
+                const boRes = await authFetch(`${API}/blue-ocean-keywords`);
+                const boData = await boRes.json();
+                const boDiv = document.getElementById('blueOceanArea');
+                if (!boData.keywords.length) {
+                    boDiv.innerHTML = '<div style="color:var(--text-muted);font-size:13px">데이터 부족</div>';
+                } else {
+                    const maxScore = boData.keywords[0].blue_ocean_score || 1;
+                    boDiv.innerHTML = boData.keywords.map((k, i) => {
+                        const barW = (k.blue_ocean_score / maxScore) * 100;
+                        return `<div style="margin-bottom:10px">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                                <span style="font-weight:600;font-size:14px">${i+1}. ${escapeHtml(k.keyword)}</span>
+                                <span style="font-size:12px;color:var(--text-muted)">영상 ${k.video_count}개 · VPH ${formatNumber(k.avg_vph)}</span>
+                            </div>
+                            <div style="height:6px;background:var(--bg-secondary);border-radius:3px;overflow:hidden">
+                                <div style="height:100%;width:${barW}%;background:linear-gradient(90deg,var(--accent),var(--accent-light));border-radius:3px"></div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+            } catch(e) { console.error('Blue ocean failed', e); }
+
+            // === 트렌드 감지 ===
+            try {
+                const trRes = await authFetch(`${API}/trend-detection`);
+                const trData = await trRes.json();
+                const trDiv = document.getElementById('trendArea');
+                const trends = trData.trends.filter(t => t.change_pct > 0);
+                if (!trends.length) {
+                    trDiv.innerHTML = '<div style="color:var(--text-muted);font-size:13px">급상승 키워드 없음</div>';
+                } else {
+                    trDiv.innerHTML = trends.slice(0, 10).map((t, i) => `
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+                            <div>
+                                <span style="font-weight:600;font-size:14px">${i+1}. ${escapeHtml(t.keyword)}</span>
+                                <span style="font-size:12px;color:var(--text-muted);margin-left:8px">영상 ${t.video_count}개</span>
+                            </div>
+                            <div style="text-align:right">
+                                <span style="color:var(--fire);font-weight:700;font-size:14px">+${t.change_pct}%</span>
+                                <div style="font-size:11px;color:var(--text-muted)">VPH ${formatNumber(t.overall_avg_vph)} → ${formatNumber(t.recent_avg_vph)}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch(e) { console.error('Trend detection failed', e); }
+
+            // === 최적 영상 길이 ===
+            try {
+                const durRes = await authFetch(`${API}/optimal-duration`);
+                const durData = await durRes.json();
+                const durDiv = document.getElementById('durationAnalysisArea');
+                if (!durData.buckets.length) {
+                    durDiv.innerHTML = '<div style="color:var(--text-muted);font-size:13px">데이터 부족</div>';
+                } else {
+                    const maxVph = Math.max(...durData.buckets.map(b => b.avg_vph), 1);
+                    durDiv.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap">${durData.buckets.map(b => {
+                        const barH = Math.max(20, (b.avg_vph / maxVph) * 120);
+                        const isBest = b.avg_vph === maxVph;
+                        return `<div style="flex:1;min-width:80px;text-align:center">
+                            <div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:140px">
+                                <div style="font-size:12px;font-weight:700;color:${isBest ? 'var(--accent-light)' : 'var(--text-secondary)'};margin-bottom:4px">${formatNumber(b.avg_vph)}</div>
+                                <div style="width:40px;height:${barH}px;background:${isBest ? 'var(--accent)' : 'var(--bg-secondary)'};border-radius:6px 6px 0 0"></div>
+                            </div>
+                            <div style="font-size:13px;font-weight:600;margin-top:8px">${b.label}</div>
+                            <div style="font-size:11px;color:var(--text-muted)">${b.count}개</div>
+                        </div>`;
+                    }).join('')}</div>`;
+                }
+            } catch(e) { console.error('Duration analysis failed', e); }
+
+            // === 소형 채널 떡상 ===
+            try {
+                const scRes = await authFetch(`${API}/small-channel-viral`);
+                const scData = await scRes.json();
+                const scDiv = document.getElementById('smallChannelArea');
+                if (!scData.videos.length) {
+                    scDiv.innerHTML = '<div style="color:var(--text-muted);font-size:13px">해당 데이터 없음</div>';
+                } else {
+                    scDiv.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">${scData.videos.slice(0, 10).map(v => `
+                        <div class="video-card" onclick="openModal('${v.video_id}')" style="cursor:pointer;display:flex;gap:12px;padding:12px;background:var(--bg-secondary);border-radius:10px">
+                            <img src="${v.thumbnail}" style="width:100px;height:56px;object-fit:cover;border-radius:6px;flex-shrink:0">
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(v.title)}</div>
+                                <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${escapeHtml(v.channel_title)} · 구독자 ${formatNumber(v.subscriber_count)}</div>
+                                <div style="font-size:12px;margin-top:4px">
+                                    <span style="color:var(--green);font-weight:700">조회수 ${formatNumber(v.views)}</span>
+                                    <span style="color:var(--fire);margin-left:8px;font-weight:600">×${v.view_sub_ratio}배</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}</div>`;
+                }
+            } catch(e) { console.error('Small channel viral failed', e); }
+
+            // === 참여율 분석 ===
+            try {
+                const egRes = await authFetch(`${API}/engagement-analysis`);
+                const egData = await egRes.json();
+                const egDiv = document.getElementById('engagementArea');
+                if (!egData.videos.length) {
+                    egDiv.innerHTML = '<div style="color:var(--text-muted);font-size:13px">데이터 부족</div>';
+                } else {
+                    let headerHtml = `<div style="display:flex;gap:20px;margin-bottom:16px">
+                        <div style="padding:8px 16px;background:var(--bg-secondary);border-radius:8px;font-size:13px">전체 평균 좋아요율 <strong style="color:var(--fire)">${egData.avg_like_rate}%</strong></div>
+                        <div style="padding:8px 16px;background:var(--bg-secondary);border-radius:8px;font-size:13px">전체 평균 댓글율 <strong style="color:var(--yellow)">${egData.avg_comment_rate}%</strong></div>
+                    </div>`;
+                    egDiv.innerHTML = headerHtml + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">${egData.videos.slice(0, 10).map(v => `
+                        <div class="video-card" onclick="openModal('${v.video_id}')" style="cursor:pointer;display:flex;gap:12px;padding:12px;background:var(--bg-secondary);border-radius:10px">
+                            <img src="${v.thumbnail}" style="width:100px;height:56px;object-fit:cover;border-radius:6px;flex-shrink:0">
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(v.title)}</div>
+                                <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${escapeHtml(v.channel_title)}</div>
+                                <div style="font-size:12px;margin-top:4px">
+                                    <span style="color:var(--fire)">좋아요 ${v.like_rate}%</span>
+                                    <span style="color:var(--yellow);margin-left:8px">댓글 ${v.comment_rate}%</span>
+                                    <span style="color:var(--text-muted);margin-left:8px">VPH ${formatNumber(v.vph)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}</div>`;
+                }
+            } catch(e) { console.error('Engagement analysis failed', e); }
+
         } catch(e) {
             console.error('Failed to load insights', e);
             document.getElementById('wordCloudArea').innerHTML = '<div style="color:var(--fire)">인사이트를 불러올 수 없습니다</div>';

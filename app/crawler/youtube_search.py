@@ -163,6 +163,40 @@ def _fetch_subscriber_counts(channel_ids: list[str], db: Session = None) -> dict
     return result
 
 
+def _fetch_channel_details(channel_ids: list[str]) -> dict[str, dict]:
+    """YouTube Channels API로 채널 상세정보 조회 (구독자, 영상수, 개설일)"""
+    result = {}
+    unique_ids = list(set(channel_ids))
+    for i in range(0, len(unique_ids), 50):
+        batch = unique_ids[i:i + 50]
+        try:
+            params = {
+                "part": "statistics,snippet",
+                "id": ",".join(batch),
+            }
+            resp = api_request(YOUTUBE_CHANNELS_URL, params)
+            if resp and resp.status_code == 200:
+                for item in resp.json().get("items", []):
+                    stats = item.get("statistics", {})
+                    snippet = item.get("snippet", {})
+                    created = snippet.get("publishedAt", "")
+                    created_dt = None
+                    if created:
+                        try:
+                            created_dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                        except Exception:
+                            pass
+                    result[item["id"]] = {
+                        "subscriber_count": int(stats.get("subscriberCount", 0)),
+                        "total_videos": int(stats.get("videoCount", 0)),
+                        "created_at": created_dt,
+                        "title": snippet.get("title", ""),
+                    }
+        except Exception:
+            logger.exception("_fetch_channel_details failed")
+    return result
+
+
 _STATS_KEYS = {"views", "likes", "comments"}
 
 def save_videos(db: Session, videos: list[dict]) -> int:
@@ -187,6 +221,10 @@ def save_videos(db: Session, videos: list[dict]) -> int:
                 existing.category_id = v["category_id"]
             if v.get("subscriber_count") and (not existing.subscriber_count or existing.subscriber_count == 0):
                 existing.subscriber_count = v["subscriber_count"]
+            if v.get("channel_total_videos") and not existing.channel_total_videos:
+                existing.channel_total_videos = v["channel_total_videos"]
+            if v.get("channel_created_at") and not existing.channel_created_at:
+                existing.channel_created_at = v["channel_created_at"]
     db.commit()
     return count
 
