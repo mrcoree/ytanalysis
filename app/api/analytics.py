@@ -13,6 +13,12 @@ import io
 router = APIRouter()
 
 
+def _require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
+    return current_user
+
+
 def _get_user_video_ids(db: Session, user_id: int) -> list[str]:
     """사용자가 검색한 키워드에 연결된 영상 ID 목록"""
     user_kws = [k[0] for k in db.query(SearchHistory.keyword).filter(
@@ -283,7 +289,7 @@ def export_csv(
 
 
 @router.get("/title-patterns")
-def get_title_patterns(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_title_patterns(db: Session = Depends(get_db), current_user: User = Depends(_require_admin)):
     """떡상 영상 제목 패턴 분석 (사용자 검색 영상만)"""
     import re
     from collections import Counter
@@ -350,7 +356,7 @@ def get_title_patterns(db: Session = Depends(get_db), current_user: User = Depen
 
 
 @router.get("/upload-time-analysis")
-def get_upload_time_analysis(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_upload_time_analysis(db: Session = Depends(get_db), current_user: User = Depends(_require_admin)):
     """최적 업로드 시간 분석 - 요일/시간대별 평균 VPH (사용자 검색 영상만)"""
     my_vids = _get_user_video_ids(db, current_user.id)
     query = (
@@ -401,7 +407,7 @@ def get_upload_time_analysis(db: Session = Depends(get_db), current_user: User =
 
 
 @router.get("/blue-ocean-keywords")
-def get_blue_ocean_keywords(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_blue_ocean_keywords(db: Session = Depends(get_db), current_user: User = Depends(_require_admin)):
     """블루오션 키워드 발굴 — VPH 높은데 영상 수 적은 키워드"""
     my_vids = _get_user_video_ids(db, current_user.id)
     if not my_vids:
@@ -448,7 +454,7 @@ def get_blue_ocean_keywords(db: Session = Depends(get_db), current_user: User = 
 
 
 @router.get("/trend-detection")
-def get_trend_detection(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_trend_detection(db: Session = Depends(get_db), current_user: User = Depends(_require_admin)):
     """트렌드 감지 — 최근 VPH가 급상승한 키워드"""
     my_vids = _get_user_video_ids(db, current_user.id)
     if not my_vids:
@@ -501,7 +507,7 @@ def get_trend_detection(db: Session = Depends(get_db), current_user: User = Depe
 
 
 @router.get("/optimal-duration")
-def get_optimal_duration(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_optimal_duration(db: Session = Depends(get_db), current_user: User = Depends(_require_admin)):
     """최적 영상 길이 분석 — 길이 구간별 평균 VPH/조회수"""
     from app.api.shared import duration_to_seconds as d2s
     my_vids = _get_user_video_ids(db, current_user.id)
@@ -555,7 +561,7 @@ def get_optimal_duration(db: Session = Depends(get_db), current_user: User = Dep
 
 
 @router.get("/small-channel-viral")
-def get_small_channel_viral(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_small_channel_viral(db: Session = Depends(get_db), current_user: User = Depends(_require_admin)):
     """소형 채널 떡상 감지 — 구독자 대비 조회수가 폭발적인 영상"""
     my_vids = _get_user_video_ids(db, current_user.id)
     query = (
@@ -604,7 +610,7 @@ def get_small_channel_viral(db: Session = Depends(get_db), current_user: User = 
 
 
 @router.get("/engagement-analysis")
-def get_engagement_analysis(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_engagement_analysis(db: Session = Depends(get_db), current_user: User = Depends(_require_admin)):
     """참여율 분석 — 좋아요/댓글 비율이 높은 영상의 특징"""
     my_vids = _get_user_video_ids(db, current_user.id)
     if not my_vids:
